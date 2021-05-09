@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"qmainwindow": "cpp",
+			"qapplication": "cpp",
+			"qvariant": "cpp",
+			"qpushbutton": "cpp",
+			"qlineedit": "cpp",
+			"qmenubar": "cpp"
+		}
+	}
+}
