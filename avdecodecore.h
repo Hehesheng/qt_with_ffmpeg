@@ -1,6 +1,7 @@
 #ifndef AVDECODECORE_H
 #define AVDECODECORE_H
 
+#include <QLabel>
 #include <QObject>
 #include <vector>
 
@@ -8,6 +9,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 #include <stdlib.h>
 }
@@ -20,15 +22,18 @@ public:
     ~AVDecodeCore();
 
     bool isRunable();
-    AVFrame *getFrame();
+    AVPacket *_getPacket();
+    AVFrame *_getFrame();
+    void setOutputLabel(QLabel *label);
 
 private:
-    FILE *file;
     AVFormatContext *pFormatContext = NULL;
+    SwsContext *scaleContext = NULL;
     AVFrame *frame = NULL;
+    AVFrame *beforeFrame = NULL;
+    AVFrame *outputFrame = 0;
     AVPacket *pkt = NULL;
-    //    QList<const AVCodec *> codecList;
-    //    QList<AVCodecContext *> codecContextList;
+    QLabel *outputLabel;
     std::vector<const AVCodec *> codecList;
     std::vector<AVCodecContext *> codecContextList;
 

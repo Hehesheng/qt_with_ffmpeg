@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "avdecodecore.h"
+#include <QAudioOutput>
 #include <QMainWindow>
 #include <memory>
 
@@ -27,6 +28,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    std::shared_ptr<AVDecodeCore> decode;
+    std::shared_ptr<AVDecodeCore> videoOutput;
+    std::shared_ptr<QAudioOutput> audioOutput;
 };
 #endif // MAINWINDOW_H

@@ -20,7 +20,7 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::on_pathPushButton_pressed() {
-    decode = std::make_shared<AVDecodeCore>(this, ui->pathLineEdit->text());
+    videoOutput = std::make_shared<AVDecodeCore>(this, ui->pathLineEdit->text());
 }
 
 void MainWindow::on_browsePushButton_pressed() {
@@ -37,5 +37,12 @@ void MainWindow::on_browsePushButton_pressed() {
 }
 
 void MainWindow::on_pushButton_clicked() {
-    decode->getFrame();
+    // AVPacket *pkt = decode->getPacket();
+    // if (pkt == NULL)
+    //     return;
+    // AVFrame *frame = decode->getFrame();
+    // if (frame == NULL)
+    //     return;
+    // QImage img((uchar *)frame->data[0], decode->codecContextList[0]->width, decode->codecContextList[0]->height, QImage::Format_RGB32);
+    // ui->videoPlayerLabel->setPixmap(QPixmap::fromImage(img));
 }

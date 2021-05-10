@@ -11,7 +11,9 @@
 			"qvariant": "cpp",
 			"qpushbutton": "cpp",
 			"qlineedit": "cpp",
-			"qmenubar": "cpp"
+			"qmenubar": "cpp",
+			"memory": "cpp",
+			"qdebug": "cpp"
 		}
 	}
 }

@@ -24,14 +24,17 @@ AVDecodeCore::AVDecodeCore(QObject *parent, QString _filename) : QObject(parent)
         qDebug() << "Could find stream(s).";
         return;
     }
+    {
+        char outputBuff[4096] = {0};
+        av_dump_format(pFormatContext, 0, outputBuff, 0);
+        qDebug() << outputBuff;
+    }
 
     for (unsigned int i = 0; i < pFormatContext->nb_streams; i++) {
-        char outputBuff[4096] = {0};
-        av_dump_format(pFormatContext, i, outputBuff, 0);
-        qDebug() << outputBuff;
-
         AVCodecParameters *pLocalCodecParameter = pFormatContext->streams[i]->codecpar;
         const AVCodec *pLocalCodec = avcodec_find_decoder(pLocalCodecParameter->codec_id);
+        qDebug() << "Stream Index: " << i << "code: " << avcodec_get_name(pLocalCodec->id);
+
         if (pLocalCodec == NULL) {
             qDebug() << "Stream Index:" << i << "Could not find codec.";
             continue;
@@ -54,8 +57,6 @@ AVDecodeCore::AVDecodeCore(QObject *parent, QString _filename) : QObject(parent)
         }
         codecList.push_back(pLocalCodec);
         codecContextList.push_back(pLocalCodecContext);
-        //        codecList.append(pLocalCodec);
-        //        codecContextList.append(pLocalCodecContext);
     }
 }
 
@@ -78,19 +79,24 @@ bool AVDecodeCore::isRunable() {
     return (pFormatContext != NULL);
 }
 
-AVFrame *AVDecodeCore::getFrame() {
-    static int cntFrame = 0;
-    static int cntAudio = 0;
-
+AVPacket *AVDecodeCore::_getPacket() {
     if (!isRunable()) {
         return NULL;
     }
 
+    av_packet_unref(pkt);
     if (av_read_frame(pFormatContext, pkt) < 0) {
         qDebug() << "Read Frame Faile.";
-        qDebug() << "SUM Frame: " << cntAudio + cntFrame;
-        qDebug() << "Frame Cnt: " << cntFrame;
-        qDebug() << "Audio Cnt: " << cntAudio;
+        return NULL;
+    }
+
+    return pkt;
+}
+
+AVFrame *AVDecodeCore::_getFrame() {
+    bool gotPic = false;
+    AVFrame *frameRGB;
+    if (!isRunable()) {
         return NULL;
     }
 
@@ -98,7 +104,6 @@ AVFrame *AVDecodeCore::getFrame() {
     qDebug() << "Stream index:" << streamIndex;
     if (pFormatContext->streams[streamIndex]->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) {
         qDebug() << "Read Not Video:" << av_get_media_type_string(pFormatContext->streams[streamIndex]->codecpar->codec_type);
-        cntAudio++;
         return NULL;
     }
     AVCodecContext *codecContext = codecContextList[streamIndex];
@@ -121,10 +126,20 @@ AVFrame *AVDecodeCore::getFrame() {
             qDebug() << "Error while receiving a frame from the decoder:", av_make_error_string(_tmp, AV_ERROR_MAX_STRING_SIZE, response);
             return NULL;
         }
+        gotPic = true;
+        SwsContext *scale = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB32, SWS_BICUBIC, NULL, NULL, NULL);
+
+        frameRGB = av_frame_alloc();
+        unsigned char *out_buf = (unsigned char *)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1));
+        av_image_fill_arrays(frameRGB->data, frameRGB->linesize, out_buf, AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1);
+        sws_scale(scale, (const unsigned char *const *)frame->data, frame->linesize, 0, codecContext->height, frameRGB->data, frameRGB->linesize);
+        sws_freeContext(scale);
+
         qDebug() << "Frame PIX Format:" << frame->format;
     }
-    cntFrame++;
-    av_packet_unref(pkt);
 
-    return frame;
+    if (!gotPic)
+        return NULL;
+
+    return frameRGB;
 }
