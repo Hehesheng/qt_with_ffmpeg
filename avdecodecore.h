@@ -18,7 +18,7 @@ class AVDecodeCore : public QObject {
     Q_OBJECT
 public:
     QString fileName;
-    explicit AVDecodeCore(QObject *parent = nullptr, QString _filename = "");
+    explicit AVDecodeCore(QLabel *parent = nullptr, QString _filename = "");
     ~AVDecodeCore();
 
     bool isRunable();
@@ -28,16 +28,19 @@ public:
 
 private:
     AVFormatContext *pFormatContext = NULL;
-    SwsContext *scaleContext = NULL;
     AVFrame *frame = NULL;
-    AVFrame *beforeFrame = NULL;
-    AVFrame *outputFrame = 0;
+    AVFrame *srcFrame = NULL;
+    AVFrame *dstFrame = NULL;
     AVPacket *pkt = NULL;
     QLabel *outputLabel;
     std::vector<const AVCodec *> codecList;
     std::vector<AVCodecContext *> codecContextList;
+    std::vector<SwsContext *> swsContextList;
 
 signals:
+
+public slots:
+    void slotsLabelSizeChanged();
 };
 
 #endif // AVDECODECORE_H

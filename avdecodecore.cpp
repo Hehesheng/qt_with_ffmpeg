@@ -2,24 +2,19 @@
 #include <QDebug>
 #include <memory>
 
-AVDecodeCore::AVDecodeCore(QObject *parent, QString _filename) : QObject(parent), fileName(_filename) {
-    frame = av_frame_alloc();
-    if (frame == NULL) {
-        qDebug() << "Frame alloc Failed.";
-        return;
-    }
-
+AVDecodeCore::AVDecodeCore(QLabel *parent, QString _filename) : QObject(parent), fileName(_filename) {
+    /* 处理packet */
     pkt = av_packet_alloc();
     if (pkt == NULL) {
         qDebug() << "Packet alloc Failed.";
         return;
     }
-
+    /* 获取格式封装 */
     if (avformat_open_input(&pFormatContext, fileName.toLocal8Bit().data(), NULL, NULL) < 0) {
         qDebug() << "Could not open file.";
         return;
     }
-
+    /* 找音视频流 */
     if (avformat_find_stream_info(pFormatContext, NULL) < 0) {
         qDebug() << "Could find stream(s).";
         return;
@@ -29,7 +24,9 @@ AVDecodeCore::AVDecodeCore(QObject *parent, QString _filename) : QObject(parent)
         av_dump_format(pFormatContext, 0, outputBuff, 0);
         qDebug() << outputBuff;
     }
-
+    /* 设置输出Label */
+    outputLabel = parent;
+    /* 寻找decodec和decodecContext */
     for (unsigned int i = 0; i < pFormatContext->nb_streams; i++) {
         AVCodecParameters *pLocalCodecParameter = pFormatContext->streams[i]->codecpar;
         const AVCodec *pLocalCodec = avcodec_find_decoder(pLocalCodecParameter->codec_id);
@@ -55,17 +52,39 @@ AVDecodeCore::AVDecodeCore(QObject *parent, QString _filename) : QObject(parent)
             qDebug() << "Stream Index:" << i << "Failed to open codec through avcodec_open2.";
             continue;
         }
+        /* 图像拉伸工具初始化 */
+        SwsContext *pLocalSwsContext = NULL;
+        if (pLocalCodecParameter->codec_type == AVMEDIA_TYPE_VIDEO) {
+            pLocalSwsContext = sws_getContext(pLocalCodecContext->width, pLocalCodecContext->height, pLocalCodecContext->pix_fmt,
+                                              outputLabel->width(), outputLabel->height(), AV_PIX_FMT_RGB32,
+                                              SWS_BICUBIC, NULL, NULL, NULL);
+        }
+        /* 结果入队 */
         codecList.push_back(pLocalCodec);
         codecContextList.push_back(pLocalCodecContext);
+        swsContextList.push_back(pLocalSwsContext);
     }
+    /* Frame初始化 */
+    srcFrame = av_frame_alloc();
+    dstFrame = av_frame_alloc();
+    av_image_fill_arrays(dstFrame->data, dstFrame->linesize, NULL,
+                         AV_PIX_FMT_RGB32, outputLabel->width(), outputLabel->height(), 1);
 }
 
 AVDecodeCore::~AVDecodeCore() {
+    qDebug() << "free AVDecodeCore.";
+    av_frame_free(&dstFrame);
+    av_frame_free(&srcFrame);
+    for (auto it : swsContextList) {
+        if (it) {
+            sws_freeContext(it);
+        }
+    }
     for (auto it : codecContextList) {
         avcodec_free_context(&it);
     }
     if (pFormatContext != NULL) {
-        avformat_free_context(pFormatContext);
+        avformat_close_input(&pFormatContext);
     }
     if (pkt != NULL) {
         av_packet_free(&pkt);
@@ -77,6 +96,10 @@ AVDecodeCore::~AVDecodeCore() {
 
 bool AVDecodeCore::isRunable() {
     return (pFormatContext != NULL);
+}
+
+void AVDecodeCore::slotsLabelSizeChanged() {
+
 }
 
 AVPacket *AVDecodeCore::_getPacket() {
@@ -103,7 +126,8 @@ AVFrame *AVDecodeCore::_getFrame() {
     int streamIndex = pkt->stream_index;
     qDebug() << "Stream index:" << streamIndex;
     if (pFormatContext->streams[streamIndex]->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) {
-        qDebug() << "Read Not Video:" << av_get_media_type_string(pFormatContext->streams[streamIndex]->codecpar->codec_type);
+        qDebug() << "Read Not Video:"
+                 << av_get_media_type_string(pFormatContext->streams[streamIndex]->codecpar->codec_type);
         return NULL;
     }
     AVCodecContext *codecContext = codecContextList[streamIndex];
@@ -111,7 +135,8 @@ AVFrame *AVDecodeCore::_getFrame() {
 
     if (response < 0) {
         char _tmp[AV_ERROR_MAX_STRING_SIZE] = {0};
-        qDebug() << "Error while sending a packet to the decoder:" << av_make_error_string(_tmp, AV_ERROR_MAX_STRING_SIZE, response);
+        qDebug() << "Error while sending a packet to the decoder:"
+                 << av_make_error_string(_tmp, AV_ERROR_MAX_STRING_SIZE, response);
         return NULL;
     }
 
@@ -123,16 +148,22 @@ AVFrame *AVDecodeCore::_getFrame() {
             break;
         } else if (response < 0) {
             char _tmp[AV_ERROR_MAX_STRING_SIZE] = {0};
-            qDebug() << "Error while receiving a frame from the decoder:", av_make_error_string(_tmp, AV_ERROR_MAX_STRING_SIZE, response);
+            qDebug() << "Error while receiving a frame from the decoder:"
+                     << av_make_error_string(_tmp, AV_ERROR_MAX_STRING_SIZE, response);
             return NULL;
         }
         gotPic = true;
-        SwsContext *scale = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt, codecContext->width, codecContext->height, AV_PIX_FMT_RGB32, SWS_BICUBIC, NULL, NULL, NULL);
+        SwsContext *scale = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt,
+                                           codecContext->width, codecContext->height, AV_PIX_FMT_RGB32,
+                                           SWS_BICUBIC, NULL, NULL, NULL);
 
         frameRGB = av_frame_alloc();
-        unsigned char *out_buf = (unsigned char *)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1));
-        av_image_fill_arrays(frameRGB->data, frameRGB->linesize, out_buf, AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1);
-        sws_scale(scale, (const unsigned char *const *)frame->data, frame->linesize, 0, codecContext->height, frameRGB->data, frameRGB->linesize);
+        unsigned char *out_buf = (unsigned char *)av_malloc(
+            av_image_get_buffer_size(AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1));
+        av_image_fill_arrays(frameRGB->data, frameRGB->linesize,
+                             out_buf, AV_PIX_FMT_RGB32, codecContext->width, codecContext->height, 1);
+        sws_scale(scale, (const unsigned char *const *)frame->data, frame->linesize, 0, codecContext->height,
+                  frameRGB->data, frameRGB->linesize);
         sws_freeContext(scale);
 
         qDebug() << "Frame PIX Format:" << frame->format;

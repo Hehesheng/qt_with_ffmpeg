@@ -20,7 +20,7 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::on_pathPushButton_pressed() {
-    videoOutput = std::make_shared<AVDecodeCore>(this, ui->pathLineEdit->text());
+    videoOutput = std::make_shared<AVDecodeCore>(ui->videoPlayerLabel, ui->pathLineEdit->text());
 }
 
 void MainWindow::on_browsePushButton_pressed() {
